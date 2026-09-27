@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8BIT.js IDE — Sprite Editor</title>
+  <style>
+    :root { --bg:#1a1a2e; --panel:#16213e; --border:#0f3460; --accent:#00ff88; --text:#e0e0e0; --muted:#888; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+    .menubar { background:#0d1b2a; border-bottom:1px solid var(--border); padding:4px 8px; display:flex; gap:12px; align-items:center; font-size:13px; }
+    .menubar .logo { color:var(--accent); font-weight:bold; margin-right:16px; }
+    .menubar button { background:transparent; border:none; color:var(--text); padding:4px 10px; cursor:pointer; border-radius:3px; font-size:13px; }
+    .menubar button:hover { background:var(--border); color:var(--accent); }
+    .main { flex:1; display:grid; grid-template-columns:200px 1fr 240px; grid-template-rows:1fr 140px; gap:1px; background:var(--border); overflow:hidden; }
+    .panel { background:var(--panel); overflow:auto; display:flex; flex-direction:column; }
+    .panel-header { background:#0d1b2a; padding:6px 10px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); border-bottom:1px solid var(--border); flex-shrink:0; }
+    #assets { grid-row:1/3; }
+    .asset-list { padding:8px; font-size:13px; }
+    .asset-item { padding:6px 8px; border-radius:3px; cursor:pointer; }
+    .asset-item:hover,.asset-item.active { background:var(--border); color:var(--accent); }
+    #editor { display:flex; flex-direction:column; align-items:center; justify-content:center; background:#0a0a12; position:relative; }
+    #pixel-canvas { image-rendering:pixelated; cursor:crosshair; border:1px solid #333; background:linear-gradient(45deg,#222 25%,transparent 25%),linear-gradient(-45deg,#222 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#222 75%),linear-gradient(-45deg,transparent 75%,#222 75%); background-size:8px 8px; background-position:0 0,0 4px,4px -4px,-4px 0; }
+    .toolbar { position:absolute; top:8px; left:8px; display:flex; flex-wrap:wrap; gap:4px; background:rgba(0,0,0,0.7); padding:6px; border-radius:4px; }
+    .toolbar button { width:32px; height:32px; background:var(--panel); border:1px solid var(--border); color:var(--text); cursor:pointer; border-radius:3px; font-size:14px; }
+    .toolbar button.active,.toolbar button:hover { border-color:var(--accent); color:var(--accent); }
+    .zoom-label { position:absolute; bottom:8px; right:8px; font-size:11px; color:var(--muted); background:rgba(0,0,0,0.6); padding:2px 6px; border-radius:2px; }
+    #properties .prop { padding:6px 10px; font-size:12px; display:grid; grid-template-columns:80px 1fr; gap:6px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.05); }
+    #properties label { color:var(--muted); }
+    #properties input,#properties select { background:#0d1b2a; border:1px solid var(--border); color:var(--text); padding:3px 6px; border-radius:2px; width:100%; font-size:12px; }
+    #palette-panel { padding:8px; }
+    .palette-grid { display:grid; grid-template-columns:repeat(8,1fr); gap:2px; }
+    .swatch { width:100%; aspect-ratio:1; border:1px solid #333; cursor:pointer; border-radius:2px; }
+    .swatch.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+    #timeline { grid-column:2/4; background:var(--panel); }
+    .timeline-frames { display:flex; gap:4px; padding:8px; overflow-x:auto; }
+    .frame-thumb { width:48px; height:48px; background:#0a0a12; border:2px solid var(--border); image-rendering:pixelated; cursor:pointer; flex-shrink:0; }
+    .frame-thumb.active { border-color:var(--accent); }
+    .statusbar { background:#0d1b2a; border-top:1px solid var(--border); padding:3px 10px; font-size:11px; color:var(--muted); display:flex; gap:20px; }
+  </style>
+</head>
+<body>
+  <div class="menubar">
+    <span class="logo">8BIT.js IDE</span>
+    <button onclick="newSprite()">New Sprite</button>
+    <button onclick="exportPNG()">Export PNG</button>
+    <button onclick="exportXML()">Export XML</button>
+    <button onclick="runPreview()">▶ Preview</button>
+    <span style="margin-left:auto;color:var(--muted);font-size:12px">Sprite Only Workspace</span>
+  </div>
+  <div class="main">
+    <div class="panel" id="assets">
+      <div class="panel-header">Sprites</div>
+      <div class="asset-list"><div class="asset-item active">player</div></div>
+      <div class="panel-header" style="margin-top:auto">Size</div>
+      <div style="padding:8px">
+        <select id="sprite-size" onchange="resizeSprite()">
+          <option value="8x8">8×8</option>
+          <option value="16x16" selected>16×16</option>
+          <option value="16x32">16×32</option>
+          <option value="32x32">32×32</option>
+          <option value="64x64">64×64</option>
+        </select>
+      </div>
+    </div>
+    <div class="panel" id="editor">
+      <div class="toolbar">
+        <button class="active" data-tool="pencil" title="Pencil">✏️</button>
+        <button data-tool="eraser" title="Eraser">🧹</button>
+        <button data-tool="fill" title="Fill">🪣</button>
+        <button data-tool="line" title="Line">／</button>
+        <button data-tool="rect" title="Rect">▭</button>
+        <button data-tool="eyedropper" title="Eyedropper">💧</button>
+        <button onclick="flipH()" title="Flip H">⇄</button>
+        <button onclick="undo()" title="Undo">↩</button>
+        <button onclick="clearCanvas()" title="Clear">🗑</button>
+      </div>
+      <canvas id="pixel-canvas" width="16" height="16"></canvas>
+      <div class="zoom-label" id="zoom-label">16× zoom</div>
+    </div>
+    <div class="panel" id="properties">
+      <div class="panel-header">Properties</div>
+      <div class="prop"><label>ID</label><input id="prop-id" value="player"></div>
+      <div class="prop"><label>Width</label><input id="prop-w" type="number" value="16" readonly></div>
+      <div class="prop"><label>Height</label><input id="prop-h" type="number" value="16" readonly></div>
+      <div class="panel-header">Palette</div>
+      <div id="palette-panel">
+        <div class="palette-grid" id="palette-grid"></div>
+        <div style="margin-top:8px"><input type="color" id="color-picker" value="#00ff88" style="width:100%;height:28px;border:none;background:transparent;cursor:pointer"></div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted)">
+          Preset: <select id="preset-select" onchange="loadPreset()" style="width:100%;margin-top:4px;background:#0d1b2a;color:#eee;border:1px solid #0f3460;padding:3px">
+            <option value="16-bit">16-bit</option>
+            <option value="NES-like">NES-like</option>
+            <option value="Game Boy-like">Game Boy</option>
+            <option value="CGA-like">CGA</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="panel" id="timeline">
+      <div class="panel-header">Animation Timeline</div>
+      <div class="timeline-frames" id="timeline-frames"><canvas class="frame-thumb active" width="16" height="16"></canvas></div>
+      <div style="padding:4px 8px;display:flex;gap:8px;align-items:center;font-size:12px">
+        <label>FPS <input id="anim-fps" type="number" value="8" min="1" max="60" style="width:40px;background:#0d1b2a;border:1px solid #0f3460;color:#eee;padding:2px"></label>
+        <button onclick="addFrame()" style="background:#0f3460;border:1px solid #00ff88;color:#00ff88;padding:2px 8px;cursor:pointer">+ Frame</button>
+        <button onclick="playAnim()" style="background:#0f3460;border:1px solid #00ff88;color:#00ff88;padding:2px 8px;cursor:pointer">▶ Play</button>
+      </div>
+    </div>
+  </div>
+  <div class="statusbar">
+    <span id="status-pos">X:0 Y:0</span>
+    <span id="status-color">Color: #00FF88</span>
+    <span id="status-tool">Tool: Pencil</span>
+    <span style="margin-left:auto">8BIT.js v1.0 · Sprite Only Mode</span>
+  </div>
+  <script src="../dist/8bit.js"></script>
+  <script>
+    let W=16,H=16,zoom=16,tool='pencil',currentColor='#00FF88';
+    let pixels=[],history=[],historyIndex=-1,isDrawing=false,startX=0,startY=0;
+    let frames=[],currentFrame=0,animPlaying=false;
+    const canvas=document.getElementById('pixel-canvas');
+    const ctx=canvas.getContext('2d');
+    ctx.imageSmoothingEnabled=false;
+
+    function initPixels(){pixels=[];for(let y=0;y<H;y++){pixels[y]=[];for(let x=0;x<W;x++)pixels[y][x]='';}}
+    function pushHistory(){history=history.slice(0,historyIndex+1);history.push(JSON.parse(JSON.stringify(pixels)));historyIndex=history.length-1;if(history.length>50){history.shift();historyIndex--;}}
+    function render(){
+      canvas.width=W*zoom;canvas.height=H*zoom;ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.strokeStyle='rgba(255,255,255,0.05)';
+      for(let x=0;x<=W;x++){ctx.beginPath();ctx.moveTo(x*zoom,0);ctx.lineTo(x*zoom,H*zoom);ctx.stroke();}
+      for(let y=0;y<=H;y++){ctx.beginPath();ctx.moveTo(0,y*zoom);ctx.lineTo(W*zoom,y*zoom);ctx.stroke();}
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(pixels[y][x]){ctx.fillStyle=pixels[y][x];ctx.fillRect(x*zoom,y*zoom,zoom,zoom);}
+      document.getElementById('zoom-label').textContent=zoom+'× zoom · '+W+'×'+H;
+      updateFrameThumb();
+    }
+    function getPos(e){const r=canvas.getBoundingClientRect();return{x:Math.max(0,Math.min(W-1,Math.floor((e.clientX-r.left)/zoom))),y:Math.max(0,Math.min(H-1,Math.floor((e.clientY-r.top)/zoom)))};}
+    function setPixel(x,y,c){if(x>=0&&y>=0&&x<W&&y<H)pixels[y][x]=c;}
+    function floodFill(x,y,target,rep){if(target===rep)return;const stack=[[x,y]];while(stack.length){const[cx,cy]=stack.pop();if(cx<0||cy<0||cx>=W||cy>=H||pixels[cy][cx]!==target)continue;pixels[cy][cx]=rep;stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);}}
+
+    document.querySelectorAll('.toolbar button[data-tool]').forEach(btn=>{
+      btn.onclick=()=>{document.querySelectorAll('.toolbar button[data-tool]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');tool=btn.dataset.tool;document.getElementById('status-tool').textContent='Tool: '+tool;};
+    });
+    canvas.onmousedown=e=>{const{x,y}=getPos(e);isDrawing=true;startX=x;startY=y;pushHistory();
+      if(tool==='pencil')setPixel(x,y,currentColor);else if(tool==='eraser')setPixel(x,y,'');
+      else if(tool==='fill')floodFill(x,y,pixels[y][x],currentColor);
+      else if(tool==='eyedropper'){currentColor=pixels[y][x]||'#000';document.getElementById('color-picker').value=currentColor;document.getElementById('status-color').textContent='Color: '+currentColor;}
+      render();
+    };
+    canvas.onmousemove=e=>{const{x,y}=getPos(e);document.getElementById('status-pos').textContent='X:'+x+' Y:'+y;
+      if(!isDrawing)return;if(tool==='pencil'){setPixel(x,y,currentColor);render();}else if(tool==='eraser'){setPixel(x,y,'');render();}
+    };
+    canvas.onmouseup=e=>{if(!isDrawing)return;const{x,y}=getPos(e);
+      if(tool==='line'){let x0=startX,y0=startY,x1=x,y1=y;const dx=Math.abs(x1-x0),dy=Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1;let err=dx-dy;
+        while(true){setPixel(x0,y0,currentColor);if(x0===x1&&y0===y1)break;const e2=2*err;if(e2>-dy){err-=dy;x0+=sx;}if(e2<dx){err+=dx;y0+=sy;}}}
+      else if(tool==='rect'){const x0=Math.min(startX,x),y0=Math.min(startY,y),x1=Math.max(startX,x),y1=Math.max(startY,y);
+        for(let i=x0;i<=x1;i++){setPixel(i,y0,currentColor);setPixel(i,y1,currentColor);}for(let j=y0;j<=y1;j++){setPixel(x0,j,currentColor);setPixel(x1,j,currentColor);}}
+      isDrawing=false;render();
+    };
+    canvas.onwheel=e=>{e.preventDefault();zoom=Math.max(1,Math.min(32,zoom+(e.deltaY<0?1:-1)));render();};
+
+    function loadPreset(){const name=document.getElementById('preset-select').value;const pal=EightBit.Palette.getPreset(name);const grid=document.getElementById('palette-grid');grid.innerHTML='';
+      pal.colors.forEach((c,i)=>{const s=document.createElement('div');s.className='swatch'+(i===0?' active':'');s.style.background=c;s.title=c;
+        s.onclick=()=>{document.querySelectorAll('.swatch').forEach(el=>el.classList.remove('active'));s.classList.add('active');currentColor=c;document.getElementById('color-picker').value=c;document.getElementById('status-color').textContent='Color: '+c;};
+        grid.appendChild(s);});if(pal.colors[0])currentColor=pal.colors[0];
+    }
+    document.getElementById('color-picker').oninput=e=>{currentColor=e.target.value.toUpperCase();document.getElementById('status-color').textContent='Color: '+currentColor;};
+
+    function undo(){if(historyIndex>0){historyIndex--;pixels=JSON.parse(JSON.stringify(history[historyIndex]));render();}}
+    function clearCanvas(){pushHistory();initPixels();render();}
+    function flipH(){pushHistory();for(let y=0;y<H;y++)pixels[y].reverse();render();}
+    function resizeSprite(){const[w,h]=document.getElementById('sprite-size').value.split('x').map(Number);W=w;H=h;document.getElementById('prop-w').value=W;document.getElementById('prop-h').value=H;initPixels();pushHistory();frames=[JSON.parse(JSON.stringify(pixels))];currentFrame=0;render();rebuildTimeline();}
+    function newSprite(){initPixels();history=[];historyIndex=-1;pushHistory();frames=[JSON.parse(JSON.stringify(pixels))];currentFrame=0;render();rebuildTimeline();}
+    function updateFrameThumb(){const thumbs=document.querySelectorAll('.frame-thumb');if(thumbs[currentFrame]){const t=thumbs[currentFrame];t.width=W;t.height=H;const tctx=t.getContext('2d');tctx.clearRect(0,0,W,H);for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(pixels[y][x]){tctx.fillStyle=pixels[y][x];tctx.fillRect(x,y,1,1);}}}
+    function rebuildTimeline(){const el=document.getElementById('timeline-frames');el.innerHTML='';frames.forEach((f,i)=>{const c=document.createElement('canvas');c.className='frame-thumb'+(i===currentFrame?' active':'');c.width=W;c.height=H;c.onclick=()=>selectFrame(i);el.appendChild(c);const tctx=c.getContext('2d');for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(f[y]&&f[y][x]){tctx.fillStyle=f[y][x];tctx.fillRect(x,y,1,1);}});}
+    function selectFrame(i){frames[currentFrame]=JSON.parse(JSON.stringify(pixels));currentFrame=i;pixels=JSON.parse(JSON.stringify(frames[i]));render();rebuildTimeline();}
+    function addFrame(){frames[currentFrame]=JSON.parse(JSON.stringify(pixels));frames.push(JSON.parse(JSON.stringify(pixels)));currentFrame=frames.length-1;rebuildTimeline();}
+    function playAnim(){if(animPlaying){animPlaying=false;return;}animPlaying=true;const fps=parseInt(document.getElementById('anim-fps').value)||8;let idx=0;const tick=()=>{if(!animPlaying)return;selectFrame(idx);idx=(idx+1)%frames.length;setTimeout(tick,1000/fps);};tick();}
+    function exportPNG(){const c=document.createElement('canvas');c.width=W;c.height=H;const cctx=c.getContext('2d');for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(pixels[y][x]){cctx.fillStyle=pixels[y][x];cctx.fillRect(x,y,1,1);}const a=document.createElement('a');a.download=(document.getElementById('prop-id').value||'sprite')+'.png';a.href=c.toDataURL();a.click();}
+    function exportXML(){frames[currentFrame]=JSON.parse(JSON.stringify(pixels));const id=document.getElementById('prop-id').value||'sprite';
+      let xml=`<?xml version="1.0"?>\n<spriteProject name="${id}" mode="spriteOnly" width="256" height="240">\n  <sprite id="${id}" width="${W}" height="${H}" x="0" y="0">\n    <animation name="idle" fps="${document.getElementById('anim-fps').value}" loop="true">\n`;
+      frames.forEach((_,i)=>{xml+=`      <frame src="${id}_${i}.png"/>\n`;});xml+=`    </animation>\n  </sprite>\n</spriteProject>`;
+      const blob=new Blob([xml],{type:'text/xml'});const a=document.createElement('a');a.download=id+'.xml';a.href=URL.createObjectURL(blob);a.click();}
+    function runPreview(){frames[currentFrame]=JSON.parse(JSON.stringify(pixels));const win=window.open('','preview','width=400,height=400');
+      win.document.write(`<!DOCTYPE html><html><body style="background:#111;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><script src="../dist/8bit.js"><\/script><script>
+        const r=new EightBit.SpriteRenderer({width:64,height:64,scale:4,background:'#1A1C2C'});
+        const s=new EightBit.Sprite({x:24,y:24,width:${W},height:${H}});
+        const frames=${JSON.stringify(frames)};s.setPixels(frames[0]);
+        s.addAnimation('idle',frames.map(f=>({pixels:f})),{fps:${parseInt(document.getElementById('anim-fps').value)||8},loop:true});s.play('idle');r.add(s);r.start();
+      <\/script></body></html>`);}
+
+    initPixels();pushHistory();frames=[JSON.parse(JSON.stringify(pixels))];loadPreset();render();
+  </script>
+</body>
+</html>

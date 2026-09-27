@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8BIT.js Demo - Retro Platformer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a1a2e;
+      color: #eee;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    h1 { color: #00ff88; margin-bottom: 8px; font-size: 24px; }
+    .info { color: #888; margin-bottom: 16px; font-size: 12px; }
+    #game-container {
+      border: 4px solid #333;
+      box-shadow: 0 0 30px rgba(0,255,136,0.2);
+      image-rendering: pixelated;
+    }
+    .controls {
+      margin-top: 16px;
+      background: #16213e;
+      padding: 12px 20px;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .controls kbd {
+      background: #0f3460;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid #533483;
+    }
+    button {
+      margin: 8px 4px;
+      padding: 6px 14px;
+      background: #0f3460;
+      color: #00ff88;
+      border: 1px solid #00ff88;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    button:hover { background: #00ff88; color: #0f3460; }
+  </style>
+</head>
+<body>
+  <h1>8BIT.js Demo</h1>
+  <p class="info">Pixel-perfect 256×240 · Scale 3x · Arrow keys / WASD to move · Space to jump</p>
+  <div id="game-container"></div>
+  <div>
+    <button id="btn-debug">Toggle Debug</button>
+    <button id="btn-shake">Camera Shake</button>
+    <button id="btn-particles">Particles</button>
+  </div>
+  <div class="controls">
+    <div><kbd>←</kbd><kbd>→</kbd> / <kbd>A</kbd><kbd>D</kbd> Move</div>
+    <div><kbd>Space</kbd> / <kbd>Z</kbd> Jump</div>
+    <div>Collect yellow coins · Avoid red enemies</div>
+  </div>
+
+  <script src="../dist/8bit.js"></script>
+  <script>
+    // ========== Create procedural pixel sprites ==========
+    function makePlayerPixels() {
+      // 16x24 simple character
+      const c = {
+        skin: '#FFCC99', hair: '#4A3728', shirt: '#3B5DC9',
+        pants: '#29366F', eye: '#1A1C2C', outline: '#1A1C2C'
+      };
+      const p = [];
+      for (let y = 0; y < 24; y++) {
+        p[y] = [];
+        for (let x = 0; x < 16; x++) p[y][x] = '';
+      }
+      // Head
+      for (let y = 2; y < 10; y++) for (let x = 4; x < 12; x++) p[y][x] = c.skin;
+      for (let y = 1; y < 5; y++) for (let x = 3; x < 13; x++) if (!p[y][x]) p[y][x] = c.hair;
+      p[5][6] = c.eye; p[5][9] = c.eye;
+      // Body
+      for (let y = 10; y < 18; y++) for (let x = 3; x < 13; x++) p[y][x] = c.shirt;
+      // Legs
+      for (let y = 18; y < 24; y++) {
+        for (let x = 4; x < 7; x++) p[y][x] = c.pants;
+        for (let x = 9; x < 12; x++) p[y][x] = c.pants;
+      }
+      return p;
+    }
+
+    function makeEnemyPixels() {
+      const p = [];
+      for (let y = 0; y < 16; y++) {
+        p[y] = [];
+        for (let x = 0; x < 16; x++) p[y][x] = '';
+      }
+      for (let y = 2; y < 14; y++) for (let x = 2; x < 14; x++) p[y][x] = '#B13E53';
+      p[5][5] = '#FFF'; p[5][10] = '#FFF';
+      p[6][5] = '#1A1C2C'; p[6][10] = '#1A1C2C';
+      for (let x = 5; x < 11; x++) p[10][x] = '#1A1C2C';
+      return p;
+    }
+
+    function makeCoinPixels() {
+      const p = [];
+      for (let y = 0; y < 8; y++) {
+        p[y] = [];
+        for (let x = 0; x < 8; x++) p[y][x] = '';
+      }
+      for (let y = 1; y < 7; y++) for (let x = 1; x < 7; x++) p[y][x] = '#FFCD75';
+      p[2][2] = '#FFEFBF'; p[5][5] = '#B13E53';
+      return p;
+    }
+
+    function makeGroundTile() {
+      const p = [];
+      for (let y = 0; y < 16; y++) {
+        p[y] = [];
+        for (let x = 0; x < 16; x++) {
+          p[y][x] = (y < 4) ? '#38B764' : '#3B5DC9';
+          if (y === 3) p[y][x] = '#257179';
+          if (y > 4 && Math.random() > 0.85) p[y][x] = '#29366F';
+        }
+      }
+      return p;
+    }
+
+    // ========== Game Setup ==========
+    const game = new EightBit.Game({
+      width: 256,
+      height: 240,
+      scale: 3,
+      parent: '#game-container',
+      background: '#1A1C2C'
+    });
+
+    // Player
+    const player = new EightBit.Character({
+      x: 40, y: 160,
+      width: 16, height: 24,
+      speed: 1.2
+    });
+    player.setPixels(makePlayerPixels());
+    player.physics.gravity = 0.35;
+    player.physics.friction = 0.2;
+    player.collider = true;
+    player.solid = true;
+    player.collisionBox = { x: 2, y: 4, w: 12, h: 20 };
+    player.health = 3;
+    player.maxHealth = 3;
+
+    // Idle / walk animations (same pixels for demo simplicity)
+    player.addAnimation('idle', [{ pixels: makePlayerPixels() }], { fps: 4, loop: true });
+    player.addAnimation('walk', [
+      { pixels: makePlayerPixels() },
+      { pixels: makePlayerPixels() }
+    ], { fps: 8, loop: true });
+    player.play('idle');
+
+    // Enemies
+    const enemies = [];
+    for (let i = 0; i < 3; i++) {
+      const e = new EightBit.Character({
+        x: 120 + i * 60, y: 180,
+        width: 16, height: 16
+      });
+      e.setPixels(makeEnemyPixels());
+      e.physics.gravity = 0.35;
+      e.collider = true;
+      e.dir = i % 2 === 0 ? 1 : -1;
+      e.speed = 0.6;
+      enemies.push(e);
+      game.scene.add(e);
+    }
+
+    // Coins
+    const coins = [];
+    for (let i = 0; i < 8; i++) {
+      const c = new EightBit.Sprite({
+        x: 50 + i * 28, y: 100 + (i % 3) * 20,
+        width: 8, height: 8
+      });
+      c.setPixels(makeCoinPixels());
+      c.collider = true;
+      c.trigger = true;
+      c.tags = ['coin'];
+      coins.push(c);
+      game.scene.add(c);
+    }
+
+    // Platforms (simple solid sprites as ground)
+    const platforms = [];
+    function addPlatform(x, y, w) {
+      for (let i = 0; i < w; i++) {
+        const t = new EightBit.Sprite({
+          x: x + i * 16, y: y,
+          width: 16, height: 16
+        });
+        t.setPixels(makeGroundTile());
+        t.collider = true;
+        t.solid = true;
+        t.layer = -1;
+        platforms.push(t);
+        game.scene.add(t);
+      }
+    }
+    addPlatform(0, 208, 16);   // main ground
+    addPlatform(48, 160, 4);   // floating
+    addPlatform(140, 120, 5);
+    addPlatform(80, 80, 3);
+
+    game.scene.add(player);
+    game.camera.follow(player);
+    game.camera.setBounds(0, 0, 400, 240);
+    game.camera.deadzone = { x: 40, y: 30 };
+
+    // Score / UI state
+    let score = 0;
+    let particles = null;
+
+    // Game loop
+    game.update((dt) => {
+      const input = game.input;
+      const speed = player.speed;
+
+      // Horizontal movement
+      let moving = false;
+      if (input.isDown('ArrowLeft') || input.isDown('a') || input.isDown('left')) {
+        player.physics.velocityX = -speed;
+        player.setDirection('left');
+        moving = true;
+      } else if (input.isDown('ArrowRight') || input.isDown('d') || input.isDown('right')) {
+        player.physics.velocityX = speed;
+        player.setDirection('right');
+        moving = true;
+      } else {
+        player.physics.velocityX *= 0.7;
+      }
+
+      if (moving) player.play('walk');
+      else player.play('idle');
+
+      // Jump
+      if ((input.isPressed(' ') || input.isPressed('Space') || input.isPressed('z') || input.isPressed('a')) && player.physics.grounded) {
+        player.jump(-6.5);
+      }
+
+      // Simple platform collision
+      player.physics.grounded = false;
+      const pb = player.getCollisionBounds();
+      for (const plat of platforms) {
+        if (!EightBit.Collision.intersects(player, plat)) continue;
+        const res = EightBit.Collision.resolveAABB(player, plat);
+        if (res.y < 0 && player.physics.velocityY >= 0) {
+          player.y += res.y;
+          player.physics.velocityY = 0;
+          player.physics.grounded = true;
+        } else if (res.y > 0) {
+          player.y += res.y;
+          player.physics.velocityY = 0;
+        } else {
+          player.x += res.x;
+          player.physics.velocityX = 0;
+        }
+      }
+
+      // Enemy AI + collision
+      for (const e of enemies) {
+        e.physics.velocityX = e.dir * e.speed;
+        e.x += e.physics.velocityX;
+        if (e.x < 20 || e.x > 360) e.dir *= -1;
+        e.flipX = e.dir < 0;
+
+        // Ground
+        e.physics.grounded = false;
+        for (const plat of platforms) {
+          if (EightBit.Collision.intersects(e, plat)) {
+            const res = EightBit.Collision.resolveAABB(e, plat);
+            if (res.y < 0) {
+              e.y += res.y;
+              e.physics.velocityY = 0;
+              e.physics.grounded = true;
+            }
+          }
+        }
+
+        if (EightBit.Collision.intersects(player, e) && !player.invincible) {
+          player.takeDamage(1);
+          player.physics.velocityY = -3;
+          player.invincible = true;
+          setTimeout(() => { player.invincible = false; }, 1000);
+          game.camera.shake(3, 8);
+        }
+      }
+
+      // Coins
+      for (let i = coins.length - 1; i >= 0; i--) {
+        const c = coins[i];
+        c.y += Math.sin(game.frame * 0.1 + i) * 0.15;
+        if (EightBit.Collision.intersects(player, c)) {
+          score += 10;
+          game.scene.remove(c);
+          coins.splice(i, 1);
+          // particle burst
+          const p = new EightBit.Particles({
+            x: c.x, y: c.y, count: 12,
+            color: '#FFCD75', gravity: 0.15, lifetime: 0.6, size: 2, speed: 1.5
+          });
+          p.burst();
+          game.scene.particles.push(p);
+        }
+      }
+
+      // Update particles
+      for (let i = game.scene.particles.length - 1; i >= 0; i--) {
+        const p = game.scene.particles[i];
+        p.update(dt);
+        if (p.particles.length === 0) game.scene.particles.splice(i, 1);
+      }
+
+      // Fall death
+      if (player.y > 300) {
+        player.x = 40; player.y = 160;
+        player.physics.velocityX = 0; player.physics.velocityY = 0;
+        player.health = Math.max(0, player.health - 1);
+      }
+    });
+
+    // Draw UI overlay
+    game.onRender((ctx) => {
+      // Health
+      for (let i = 0; i < player.maxHealth; i++) {
+        ctx.fillStyle = i < player.health ? '#B13E53' : '#333C57';
+        ctx.fillRect(8 + i * 12, 8, 10, 8);
+      }
+      // Score
+      EightBit.Text.draw(ctx, 'SCORE ' + score, 180, 8, { color: '#FFCD75', size: 10, shadow: { x: 1, y: 1, color: '#000' } });
+      if (player.health <= 0) {
+        EightBit.Text.draw(ctx, 'GAME OVER', 80, 100, { color: '#FF0000', size: 16 });
+      }
+    });
+
+    // Buttons
+    document.getElementById('btn-debug').onclick = () => {
+      game.debug.enabled = !game.debug.enabled;
+    };
+    document.getElementById('btn-shake').onclick = () => game.camera.shake(5, 15);
+    document.getElementById('btn-particles').onclick = () => {
+      const p = new EightBit.Particles({
+        x: player.x + 8, y: player.y + 12, count: 30,
+        colors: ['#FF0000', '#00FF00', '#0000FF', '#FFFF00'],
+        gravity: 0.2, lifetime: 1, size: 3, speed: 3
+      });
+      p.burst();
+      game.scene.particles.push(p);
+    };
+
+    game.start();
+  </script>
+</body>
+</html>

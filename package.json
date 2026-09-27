@@ -1,0 +1,39 @@
+{
+  "name": "8bit.js",
+  "version": "1.0.0",
+  "description": "A complete 2D retro game framework for 8-bit / 16-bit style games, sprites, tilemaps, and pixel-art with integrated IDE",
+  "main": "dist/8bit.js",
+  "module": "dist/8bit.module.js",
+  "types": "dist/8bit.d.ts",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "dev": "node scripts/dev.js",
+    "test": "node tests/run.js",
+    "demo": "npx serve examples",
+    "ide": "npx serve ide"
+  },
+  "keywords": [
+    "8bit",
+    "16bit",
+    "retro",
+    "pixel-art",
+    "game-engine",
+    "sprite",
+    "tilemap",
+    "canvas",
+    "2d"
+  ],
+  "author": "8BIT.js Team",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src",
+    "docs",
+    "examples",
+    "ide"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/example/8bit.js"
+  }
+}
